@@ -1,5 +1,7 @@
 package ch.ethz.ir.g19
 
+import java.io._
+import collection.mutable.Map
 import scala.collection.mutable.Stack
 import java.net.URL
 
@@ -11,6 +13,10 @@ object WebCrawler {
   var pageText = ""
   var verbose = false
   val n = 5;
+  val nGram = 3
+
+  var germanModel : Map[String, Double] = null
+  var englishModel : Map[String, Double] = null
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -18,18 +24,51 @@ object WebCrawler {
 
     val initPage =
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/en.html"
+    toParse.push((initPage, ""))
 
-    if (verbose)
-      println("Let's crawl! Origin URL: " + initPage)
-    readURL((initPage, ""))
+    englishModel = loadModel("models/english")
+    germanModel = loadModel("models/german")
     //while (!toParse.isEmpty) {
-    //  readURL(toParse.pop())
+      if (verbose)
+        println("crawling: " + initPage)
+      readURL(toParse.pop())
     //}
+  }
+
+  def loadModel(modelPath : String) : Map[String, Double] = {
+    val ois = new ObjectInputStream(new FileInputStream(modelPath))
+    val model = ois.readObject()
+    ois.close()
+    
+    return model.asInstanceOf[Map[String, Double]]
+  }
+
+  def isEnglish(grams : IndexedSeq[String]) : Boolean = {
+    val probEnglish = 
+      grams.map(t => Math.log(englishModel.getOrElse(t, 0.0)
+          .asInstanceOf[Double] + 1)).reduce(_ + _)
+    val probGerman = 
+      grams.map(t => Math.log(germanModel.getOrElse(t, 0.0)
+          .asInstanceOf[Double] + 1)).reduce(_ + _)
+    if (verbose) {
+      println("P(english)=" + probEnglish)
+      println("P(german)=" + probGerman)
+    }
+    return probEnglish > probGerman
+  }
+
+  def getGrams(text : String) : IndexedSeq[String] = {
+    val normalizedText = pageText.toLowerCase.replaceAll("[\\d()\"]+", "")
+    val grams = for {
+      start <- 0 to normalizedText.length
+      if start + nGram <= normalizedText.length
+    } yield normalizedText.substring(start, start + nGram)
+    return grams
   }
 
   def readURL(tupleURL: Tuple2[String, String]) {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
-    val textRegex = "(>)([^<>\\n]+[a-zA-Z0-9]+)".r
+    val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
     val sourceCode = io.Source.fromURL(tupleURL._1);
 
     for (l <- sourceCode.getLines()) {
@@ -38,9 +77,10 @@ object WebCrawler {
         m => {
           val parent = tupleURL._2
           if (parent == "") tupleURL._1 // in case it's the first URL
-          // TODO check not in unique urls
-          toParse.push((m.group(2), ""))
-          if (verbose) println("new URL found: " + m.group(2))
+          if (m.group(2).charAt(0) != '#')
+            // TODO check not in unique urls
+            toParse.push((m.group(2), ""))
+          if (verbose) println(" new URL found: " + m.group(2))
         }
       }
       // Get textual content
@@ -53,6 +93,10 @@ object WebCrawler {
       }
     }
     
+
+    val grams = getGrams(pageText)
+    isEnglish(grams)
+
        val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
        val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
@@ -62,11 +106,11 @@ object WebCrawler {
        pageText = "";
        
   }
-  
-    def binary(value: Int) : String =
-      String.format("%16s", Integer
-          .toBinaryString(value))
-          .replace(' ', '0')
+
+  def binary(value: Int) : String =
+    String.format("%16s", Integer
+        .toBinaryString(value))
+        .replace(' ', '0')
 
   // first element = url
   // second element = parent
@@ -99,5 +143,14 @@ object WebCrawler {
       
   }
 
+  def streamTokens(path : String, n : Int) : Iterator[String] = {
+    val tokens = for {
+      line <- io.Source.fromFile(path).getLines.map(l => l.toLowerCase)
+          .map(l => l.replaceAll("[\\d()\"]+", "")).take(200)
+      start <- 0 to line.length
+      if start + n <= line.length
+    } yield line.substring(start, start + n)
+    return tokens
+  }
 }
 
