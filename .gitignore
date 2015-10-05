@@ -1,2 +1,3 @@
 .cache-main
+*.orig
 bin/
