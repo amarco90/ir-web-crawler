@@ -7,7 +7,10 @@ object WebCrawler {
   // The Tuple2 -> (URL to parse, parent URL)
   val toParse = new Stack[Tuple2[String, String]]
   val uniqueURLs = Set[String]()
+//  var pageShingles = Set[String]()
+  var pageText = ""
   var verbose = false
+  val n = 5;
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -26,9 +29,11 @@ object WebCrawler {
 
   def readURL(tupleURL: Tuple2[String, String]) {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
+    val textRegex = "(>)([^<>\\n]+[a-zA-Z0-9]+)".r
     val sourceCode = io.Source.fromURL(tupleURL._1);
 
     for (l <- sourceCode.getLines()) {
+      // find new URLS
       urlRegex.findAllIn(l).matchData foreach {
         m => {
           val parent = tupleURL._2
@@ -38,9 +43,27 @@ object WebCrawler {
           if (verbose) println("new URL found: " + m.group(2))
         }
       }
+      // Get textual content
+      textRegex.findAllIn(l).matchData foreach {
+        m => {
+          val text = m.group(2)
+          pageText += text + " "
+        }
+        
+      }
     }
+    
+       val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
+       val shingles = tokens.sliding(n).toSet
+       val hashes = shingles.map(_.hashCode).map { h => binary(h) }
+    
+    
   }
   
+    def binary(value: Int) : String =
+      String.format("%16s", Integer
+          .toBinaryString(value))
+          .replace(' ', '0')
 
   // first element = url
   // second element = parent
