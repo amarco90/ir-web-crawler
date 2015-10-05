@@ -55,9 +55,12 @@ object WebCrawler {
     
        val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
-       val hashes = shingles.map(_.hashCode).map { h => binary(h) }
+       val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
     
-    
+       
+       
+       pageText = "";
+       
   }
   
     def binary(value: Int) : String =
@@ -75,6 +78,25 @@ object WebCrawler {
         else cur :+ dir // cd into directory
     }
     return parts.mkString("/") // build the string back
+  }
+    
+  def sign(n:Integer): Integer = {
+    if(n < 1) return 0
+    else return 1
+  }
+  
+  def permutations(shingleSet: List[String]) = {
+      val listOfbitList = shingleSet.map { x => x.sliding(1).toList }
+
+      val test = List(List("1","1","1","1"), List("0","1","0","1"))
+      val bigG = for {pos <- 0 until listOfbitList.apply(0).length}
+        yield listOfbitList.map { x => (x.apply(pos)).toInt*2-1 }.reduce(_+_)
+        
+      val smallG = bigG.map { x => sign(x)}
+        
+        //TODO :  n-bits permutations
+      
+      
   }
 
 }
