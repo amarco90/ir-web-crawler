@@ -3,6 +3,7 @@ package ch.ethz.ir.g19
 import java.io._
 import collection.mutable.Map
 import scala.collection.mutable.Stack
+import scala.collection.mutable.HashMap
 import java.net.URL
 
 object WebCrawler {
@@ -14,6 +15,7 @@ object WebCrawler {
   var verbose = false
   val n = 5;
   val nGram = 3
+  val pageHashes = new HashMap[String, List[String]]
 
   var germanModel : Map[String, Double] = null
   var englishModel : Map[String, Double] = null
@@ -100,6 +102,10 @@ object WebCrawler {
        val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
        val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
+       
+       val hashPermutedList = permutations(hashes)
+       
+       pageHashes.put(tupleURL._2, hashPermutedList)
     
        
        
@@ -129,7 +135,7 @@ object WebCrawler {
     else return 1
   }
   
-  def permutations(shingleSet: List[String]) = {
+  def permutations(shingleSet: List[String]): List[String] = {
       val listOfbitList = shingleSet.map { x => x.sliding(1).toList }
 
       val test = List(List("1","1","1","1"), List("0","1","0","1"))
@@ -138,8 +144,12 @@ object WebCrawler {
         
       val smallG = bigG.map { x => sign(x)}
         
-        //TODO :  n-bits permutations
+      val permutations = Stream.continually(smallG.reverse).flatten.sliding(smallG.size).map(_.reverse)
       
+      val permutationList = for { l <- 1 until 32 }
+        yield permutations.take(1).flatten.mkString   
+        
+        return permutationList.toList
       
   }
 
@@ -151,6 +161,12 @@ object WebCrawler {
       if start + n <= line.length
     } yield line.substring(start, start + n)
     return tokens
+  }
+  
+  def searchDuplicates() = {
+    
+
+    
   }
 }
 
