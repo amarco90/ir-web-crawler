@@ -1,7 +1,5 @@
 package ch.ethz.ir.g19
 
-import java.io._
-import collection.mutable.Map
 import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
 import java.net.URL
@@ -14,58 +12,25 @@ object WebCrawler {
   var pageText = ""
   var verbose = false
   val n = 5;
-  val nGram = 3
+  val gramLength = 3
   val pageHashes = new HashMap[String, List[String]]
-
-  var germanModel : Map[String, Double] = null
-  var englishModel : Map[String, Double] = null
+  var langDet : LanguageDetector = null
 
   def main(args: Array[String]) {
     if (args contains "-v")
       verbose = true
 
+    langDet = new LanguageDetector(gramLength, verbose)
+
     val initPage =
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/en.html"
     toParse.push((initPage, ""))
 
-    englishModel = loadModel("models/english")
-    germanModel = loadModel("models/german")
     //while (!toParse.isEmpty) {
       if (verbose)
         println("crawling: " + initPage)
       readURL(toParse.pop())
     //}
-  }
-
-  def loadModel(modelPath : String) : Map[String, Double] = {
-    val ois = new ObjectInputStream(new FileInputStream(modelPath))
-    val model = ois.readObject()
-    ois.close()
-    
-    return model.asInstanceOf[Map[String, Double]]
-  }
-
-  def isEnglish(grams : IndexedSeq[String]) : Boolean = {
-    val probEnglish = 
-      grams.map(t => Math.log(englishModel.getOrElse(t, 0.0)
-          .asInstanceOf[Double] + 1)).reduce(_ + _)
-    val probGerman = 
-      grams.map(t => Math.log(germanModel.getOrElse(t, 0.0)
-          .asInstanceOf[Double] + 1)).reduce(_ + _)
-    if (verbose) {
-      println("P(english)=" + probEnglish)
-      println("P(german)=" + probGerman)
-    }
-    return probEnglish > probGerman
-  }
-
-  def getGrams(text : String) : IndexedSeq[String] = {
-    val normalizedText = pageText.toLowerCase.replaceAll("[\\d()\"]+", "")
-    val grams = for {
-      start <- 0 to normalizedText.length
-      if start + nGram <= normalizedText.length
-    } yield normalizedText.substring(start, start + nGram)
-    return grams
   }
 
   def readURL(tupleURL: Tuple2[String, String]) {
@@ -96,8 +61,7 @@ object WebCrawler {
     }
     
 
-    val grams = getGrams(pageText)
-    isEnglish(grams)
+    langDet.isEnglish(pageText)
 
        val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
