@@ -10,7 +10,7 @@ object WebCrawler {
   val uniqueURLs = Set[String]()
 //  var pageShingles = Set[String]()
   var pageText = ""
-  var verbose = false
+  var verbose = 0
   val n = 5;
   val gramLength = 3
   val pageHashes = new HashMap[String, List[String]]
@@ -18,7 +18,9 @@ object WebCrawler {
 
   def main(args: Array[String]) {
     if (args contains "-v")
-      verbose = true
+      verbose = 1
+    if (args contains "-vv")
+      verbose = 2
 
     langDet = new LanguageDetector(gramLength, verbose)
 
@@ -27,7 +29,7 @@ object WebCrawler {
     toParse.push((initPage, ""))
 
     //while (!toParse.isEmpty) {
-      if (verbose)
+      if (verbose >= 1)
         println("crawling: " + initPage)
       readURL(toParse.pop())
     //}
@@ -44,10 +46,12 @@ object WebCrawler {
         m => {
           val parent = tupleURL._2
           if (parent == "") tupleURL._1 // in case it's the first URL
-          if (m.group(2).charAt(0) != '#')
+          if (m.group(2).charAt(0) != '#') {
             // TODO check not in unique urls
             toParse.push((m.group(2), ""))
-          if (verbose) println(" new URL found: " + m.group(2))
+            if (verbose >= 2)
+              println(" new URL found: " + m.group(2))
+          }
         }
       }
       // Get textual content

@@ -7,7 +7,7 @@ import collection.mutable.Map
  * @param n Integer the gram length
  * @param verbose Boolean verbose flag
  */
-class LanguageDetector(val n : Integer, val verbose : Boolean) {
+class LanguageDetector(val n : Integer, val verbose : Integer) {
   val englishModel = loadModel("models/english")
   val germanModel = loadModel("models/german")
 
@@ -19,7 +19,7 @@ class LanguageDetector(val n : Integer, val verbose : Boolean) {
   def isEnglish(query : String) : Boolean = {
     val pEnglish = probability(this.grams(query, n), englishModel)
     val pGerman = probability(this.grams(query, n), germanModel)
-    if (verbose) {
+    if (verbose >= 1) {
       println("P(english)=" + pEnglish)
       println("P(german)=" + pGerman)
     }
