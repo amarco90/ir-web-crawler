@@ -31,11 +31,11 @@ object WebCrawler {
     //while (!toParse.isEmpty) {
       if (verbose >= 1)
         println("crawling: " + initPage)
-      readURL(toParse.pop())
+      parseURL(toParse.pop())
     //}
   }
 
-  def readURL(tupleURL: Tuple2[String, String]) {
+  def parseURL(tupleURL: Tuple2[String, String]) {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
     val sourceCode = io.Source.fromURL(tupleURL._1);
@@ -89,7 +89,7 @@ object WebCrawler {
   // first element = url
   // second element = parent
   def formatURL(element: Tuple2[String, String]): String = {
-      val parts = element._1.split('/').foldLeft(element._2.split('/')) { 
+    val parts = element._1.split('/').foldLeft(element._2.split('/')) {
       case (cur, dir) =>
         if (dir == ".") cur // stay in current directory
         else if (dir == "..") cur.dropRight(1) // go up in the tree
