@@ -16,6 +16,7 @@ object WebCrawler {
   val gramLength = 3
   val pageHashes = new HashMap[String, List[String]]
   var langDet : LanguageDetector = null
+  var studentOccurrences = 0
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -65,7 +66,6 @@ object WebCrawler {
         
       }
     }
-    
 
     langDet.isEnglish(pageText)
 
@@ -76,11 +76,10 @@ object WebCrawler {
        val hashPermutedList = permutations(hashes)
        
        pageHashes.put(url, hashPermutedList)
-    
-       
-       
-       pageText = "";
-       
+    val currentStudent = "student".r.findAllIn(pageText).length
+    studentOccurrences += currentStudent
+
+    pageText = "";
   }
 
   def binary(value: Int) : String =
