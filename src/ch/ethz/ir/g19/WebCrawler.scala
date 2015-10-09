@@ -7,7 +7,7 @@ import java.net.URL
 
 object WebCrawler {
   // The Tuple2 -> (URL to parse, parent URL)
-  val toParse = new Stack[Tuple2[String, String]]
+  val toParse = new Stack[String]
   val uniqueURLs = Set[String]()
 //  var pageShingles = Set[String]()
   var pageText = ""
@@ -29,19 +29,22 @@ object WebCrawler {
     val initParent =
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
     val initResource = "en.html"
-    toParse.push((initResource, initParent))
+    val initURL = formatURL(initResource, initParent)
+    toParse.push(initURL)
+    uniqueURLs.add(initURL)
 
-    //while (!toParse.isEmpty) {
-      val url = formatURL(toParse.pop())
+    while (!toParse.isEmpty) {
+      val url = toParse.pop()
       if (verbose >= 1)
         println("crawling: " + url)
       parseURL(url)
-    //}
+    }
   }
 
   def parseURL(url: String) {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
+    val anchorsAndParams =  "(#.*)|(\\?.*)".r
     val sourceCode = io.Source.fromURL(url);
 
     for (l <- sourceCode.getLines()) {
@@ -49,11 +52,16 @@ object WebCrawler {
       urlRegex.findAllIn(l).matchData foreach {
         m => {
           val foundURL = m.group(2)
-          if (foundURL.charAt(0) != '#') {
-            // TODO check not in unique urls
-            toParse.push((foundURL, url))
+          val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
+          val absoluteFoundURL = anchorsAndParams
+              .replaceAllIn(formatURL((foundURL, parentURL)), "")
+          if (foundURL.charAt(0) != '#' && 
+              !uniqueURLs.contains(absoluteFoundURL)) {
+            toParse.push(absoluteFoundURL)
+            uniqueURLs.add(absoluteFoundURL)
             if (verbose >= 2)
-              println(" new URL found: " + foundURL)
+              println(" new URL found: " + absoluteFoundURL +
+                      " (" + foundURL + ")")
           }
         }
       }
@@ -69,13 +77,13 @@ object WebCrawler {
 
     langDet.isEnglish(pageText)
 
-       val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
+       /*val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
        val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
        
        val hashPermutedList = permutations(hashes)
        
-       pageHashes.put(url, hashPermutedList)
+       pageHashes.put(url, hashPermutedList)*/
     val currentStudent = "student".r.findAllIn(pageText).length
     studentOccurrences += currentStudent
 
