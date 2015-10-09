@@ -1,5 +1,6 @@
 package ch.ethz.ir.g19
 
+import scala.collection.mutable.Set
 import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
 import java.net.URL
@@ -24,33 +25,34 @@ object WebCrawler {
 
     langDet = new LanguageDetector(gramLength, verbose)
 
-    val initPage =
-        "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/en.html"
-    toParse.push((initPage, ""))
+    val initParent =
+        "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
+    val initResource = "en.html"
+    toParse.push((initResource, initParent))
 
     //while (!toParse.isEmpty) {
+      val url = formatURL(toParse.pop())
       if (verbose >= 1)
-        println("crawling: " + initPage)
-      parseURL(toParse.pop())
+        println("crawling: " + url)
+      parseURL(url)
     //}
   }
 
-  def parseURL(tupleURL: Tuple2[String, String]) {
+  def parseURL(url: String) {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
-    val sourceCode = io.Source.fromURL(tupleURL._1);
+    val sourceCode = io.Source.fromURL(url);
 
     for (l <- sourceCode.getLines()) {
       // find new URLS
       urlRegex.findAllIn(l).matchData foreach {
         m => {
-          val parent = tupleURL._2
-          if (parent == "") tupleURL._1 // in case it's the first URL
-          if (m.group(2).charAt(0) != '#') {
+          val foundURL = m.group(2)
+          if (foundURL.charAt(0) != '#') {
             // TODO check not in unique urls
-            toParse.push((m.group(2), ""))
+            toParse.push((foundURL, url))
             if (verbose >= 2)
-              println(" new URL found: " + m.group(2))
+              println(" new URL found: " + foundURL)
           }
         }
       }
@@ -73,7 +75,7 @@ object WebCrawler {
        
        val hashPermutedList = permutations(hashes)
        
-       pageHashes.put(tupleURL._2, hashPermutedList)
+       pageHashes.put(url, hashPermutedList)
     
        
        
