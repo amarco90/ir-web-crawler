@@ -5,6 +5,7 @@ import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
 import scala.io.BufferedSource
 import java.io.FileNotFoundException
+import scala.util.Random
 
 object WebCrawler {
   // The Tuple2 -> (URL to parse, parent URL)
@@ -103,9 +104,8 @@ object WebCrawler {
   }
 
   def binary(value: Int) : String =
-    String.format("%16s", Integer
-        .toBinaryString(value))
-        .replace(' ', '0')
+    String.format("%31s", Integer
+        .toBinaryString(value)).replace(' ', '0')
 
   // first element = url
   // second element = parent
@@ -124,23 +124,74 @@ object WebCrawler {
     else return 1
   }
   
-  def permutations(shingleSet: List[String]): List[String] = {
+  def getFingerprint(shingleSet: List[String]): String = {
       val listOfbitList = shingleSet.map { x => x.sliding(1).toList }
 
-      val test = List(List("1","1","1","1"), List("0","1","0","1"))
-      val bigG = for {pos <- 0 until listOfbitList.apply(0).length}
-        yield listOfbitList.map { x => (x.apply(pos)).toInt*2-1 }.reduce(_+_)
+   //   val test = List(List("1","1","1","1"), List("0","1","0","1"))
+      val bigG = for {pos <- 0 until listOfbitList.apply(0).length} yield listOfbitList.map { x => (x.apply(pos)).toInt*2-1 }.reduce(_+_)
         
-      val smallG = bigG.map { x => sign(x)}
+      val smallG = bigG.map { x => sign(x)}.mkString
         
-      val permutations = Stream.continually(smallG.reverse).flatten.sliding(smallG.size).map(_.reverse)
-      
-      val permutationList = for { l <- 1 until 32 }
-        yield permutations.take(1).flatten.mkString   
-        
-        return permutationList.toList
+      return smallG
       
   }
+  
+  // Permutations: HashMap(pi_k -> List(URL, Fingerprint))
+  
+  def definePermutations(n: Int) : HashMap[List[Int], List[(String, String)]] = {
+    val permutedTables = HashMap[List[Int], List[(String, String)]]()
+    
+    var iter = n
+    
+    while(iter != 0){
+      val randomP = sample(0 to 30 toList, 20)
+      if(!permutedTables.contains(randomP)){
+        permutedTables.put(randomP, List())
+        iter = iter - 1;  
+      }
+    }
+    
+   return permutedTables
+    
+  }
+  
+  
+  
+  def storePermutation(url: String, fingerprint: String, pTables: HashMap[List[Int], List[(String, String)]]): HashMap[List[Int], List[(String, String)]] = {
+    
+    val intFP = Integer.parseInt(fingerprint,2)
+    val emptyMask = "0000000000000000000000000000000"
+    
+    
+
+    for(pi_k <- pTables.keySet){
+      var mask = emptyMask;
+      mask = pi_k.foldLeft(mask)((s, i) => s.updated(i, '1'))
+      val maskB = Integer.parseInt(mask,2)
+      
+      val permutedFP = (intFP & maskB).toBinaryString
+      
+      pTables(pi_k) :+ (url, permutedFP)
+      
+    }
+    
+    return pTables;
+  
+    
+  }
+  
+  def sample[A](itms:List[A], sampleSize:Int) = {
+
+        def collect(vect: Vector[A], sampleSize: Int, acc : List[A]) : List[A] = {
+            if (sampleSize == 0) acc
+            else {
+                val index = Random.nextInt(vect.size)
+                collect( vect.updated(index, vect(0)) tail, sampleSize - 1, vect(index) :: acc)
+            }
+        }
+
+        collect(itms toVector, sampleSize, Nil)
+    } 
 
   def streamTokens(path : String, n : Int) : Iterator[String] = {
     val tokens = for {
