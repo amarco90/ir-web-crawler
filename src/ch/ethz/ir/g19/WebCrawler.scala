@@ -3,7 +3,8 @@ package ch.ethz.ir.g19
 import scala.collection.mutable.Set
 import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
-import java.net.URL
+import scala.io.BufferedSource
+import java.io.FileNotFoundException
 
 object WebCrawler {
   // The Tuple2 -> (URL to parse, parent URL)
@@ -45,23 +46,34 @@ object WebCrawler {
     val urlRegex = "(<a.*href=\")((?!http)[^\\s]+)(\")".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
     val anchorsAndParams =  "(#.*)|(\\?.*)".r
-    val sourceCode = io.Source.fromURL(url);
+    var sourceCode : BufferedSource = null
+    try {
+      sourceCode = io.Source.fromURL(url);
+    } catch {
+      case fnfe: FileNotFoundException => {
+        System.err.println("Resource not found: " + url)
+        return
+      }
+    }
 
     for (l <- sourceCode.getLines()) {
       // find new URLS
       urlRegex.findAllIn(l).matchData foreach {
         m => {
-          val foundURL = m.group(2)
+          val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
-          val absoluteFoundURL = anchorsAndParams
-              .replaceAllIn(formatURL((foundURL, parentURL)), "")
-          if (foundURL.charAt(0) != '#' && 
-              !uniqueURLs.contains(absoluteFoundURL)) {
+          val absoluteFoundURL = formatURL((foundURL, parentURL))
+          if (foundURL != "" && foundURL.endsWith(".html")
+              && !foundURL.contains("login") // login sites are never found
+              && !uniqueURLs.contains(absoluteFoundURL)) {
             toParse.push(absoluteFoundURL)
             uniqueURLs.add(absoluteFoundURL)
             if (verbose >= 2)
               println(" new URL found: " + absoluteFoundURL +
                       " (" + foundURL + ")")
+          } else {
+            if (verbose >= 2)
+              println(" skipping not html resource " + absoluteFoundURL)
           }
         }
       }
@@ -71,11 +83,11 @@ object WebCrawler {
           val text = m.group(2)
           pageText += text + " "
         }
-        
       }
     }
 
-    langDet.isEnglish(pageText)
+    if (pageText != "")
+      langDet.isEnglish(pageText)
 
        /*val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
