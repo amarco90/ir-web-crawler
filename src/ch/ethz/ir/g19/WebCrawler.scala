@@ -1,7 +1,7 @@
 package ch.ethz.ir.g19
 
 import scala.collection.mutable.Set
-import scala.collection.mutable.Stack
+import scala.collection.mutable.Queue
 import scala.collection.mutable.HashMap
 import scala.io.BufferedSource
 import java.io.FileNotFoundException
@@ -9,8 +9,9 @@ import scala.util.Random
 
 object WebCrawler {
   // The Tuple2 -> (URL to parse, parent URL)
-  val toParse = new Stack[String]
+  val toParse = new Queue[String]
   val uniqueURLs = Set[String]()
+  var notFoundResources = 0
   val uniqueEnglishPages = Set[String]()
   var uniqEngPages = 0;
 //  var pageShingles = Set[String]()
@@ -38,21 +39,21 @@ object WebCrawler {
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
     val initResource = "en.html"
     val initURL = formatURL(initResource, initParent)
-    toParse.push(initURL)
+    toParse.enqueue(initURL)
     uniqueURLs.add(initURL)
 
     while (!toParse.isEmpty) {
-      val url = toParse.pop()
+      val url = toParse.dequeue()
       if (verbose >= 1)
         println("crawling: " + url)
       parseURL(url)
     }
     
-    val dupli = searchDuplicates()
+    //val dupli = searchDuplicates()
     println("-----------OUTPUT------------")
-    println("Distinct URLs : " + uniqueURLs.size)
-    println("Exact duplicates : " + dupli._2)
-    println("Near duplicates : " + dupli._1)
+    println("Distinct URLs : " + (uniqueURLs.size - notFoundResources))
+    //println("Exact duplicates : " + dupli._2)
+    //println("Near duplicates : " + dupli._1)
     println("Unique English pages found : " + uniqEngPages)
     println("Term frequency of \"student\" : " + studentOccurrences)
   }
@@ -66,7 +67,9 @@ object WebCrawler {
       sourceCode = io.Source.fromURL(url);
     } catch {
       case fnfe: FileNotFoundException => {
-        System.err.println("Resource not found: " + url)
+        if (verbose >= 2)
+          System.err.println("Resource not found: " + url)
+        notFoundResources += 1
         return
       }
     }
@@ -79,16 +82,15 @@ object WebCrawler {
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
           val absoluteFoundURL = formatURL((foundURL, parentURL))
           if (foundURL != "" && foundURL.endsWith(".html")
-              && !foundURL.contains("login") // login sites are never found
-              && !uniqueURLs.contains(absoluteFoundURL)) {
-            toParse.push(absoluteFoundURL)
+              /*&& !uniqueURLs.contains(absoluteFoundURL)*/) {
+            toParse.enqueue(absoluteFoundURL)
             uniqueURLs.add(absoluteFoundURL)
+            //if (verbose >= 2)
+            //  println(" new URL found: " + absoluteFoundURL +
+            //          " (" + foundURL + ")")
+          } else if (!foundURL.endsWith(".html")) {
             if (verbose >= 2)
-              println(" new URL found: " + absoluteFoundURL +
-                      " (" + foundURL + ")")
-          } else {
-            if (verbose >= 2)
-              println(" skipping not html resource " + absoluteFoundURL)
+              println(" skipping not html resource " + foundURL)
           }
         }
       }
@@ -113,7 +115,7 @@ object WebCrawler {
        
        pageHashes.put(url, fingerprint)
        
-    val currentStudent = "student".r.findAllIn(pageText).length
+    val currentStudent = "(?i)\\sstudent\\s".r.findAllIn(pageText).length
     studentOccurrences += currentStudent
 
     pageText = "";
