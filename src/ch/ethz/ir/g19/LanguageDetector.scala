@@ -20,7 +20,7 @@ class LanguageDetector(val n : Integer, val verbose : Integer) {
     val pEnglish = probability(this.grams(query, n), englishModel)
     val pGerman = probability(this.grams(query, n), germanModel)
     if (verbose >= 1) {
-      println("P(english) =" + pEnglish)
+      println("P(english) = " + pEnglish)
       println("P(german)  = " + pGerman)
     }
     return pEnglish > pGerman
