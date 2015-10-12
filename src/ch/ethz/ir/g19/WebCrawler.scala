@@ -23,7 +23,7 @@ object WebCrawler {
   var langDet : LanguageDetector = null
   var studentOccurrences = 0
   var permutedTables = HashMap[List[Int], List[(String, String)]]()
-  
+  var cc = 0
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -49,11 +49,11 @@ object WebCrawler {
       parseURL(url)
     }
     
-    //val dupli = searchDuplicates()
+    val dupli = searchDuplicates()
     println("-----------OUTPUT------------")
     println("Distinct URLs : " + (uniqueURLs.size - notFoundResources))
-    //println("Exact duplicates : " + dupli._2)
-    //println("Near duplicates : " + dupli._1)
+    println("Exact duplicates : " + dupli._2)
+    println("Near duplicates : " + dupli._1)
     println("Unique English pages found : " + uniqEngPages)
     println("Term frequency of \"student\" : " + studentOccurrences)
   }
@@ -74,6 +74,10 @@ object WebCrawler {
       }
     }
 
+    cc+=1
+    
+    println("---------------------------------" + cc + "---------------------------------")
+    
     for (l <- sourceCode.getLines()) {
       // find new URLS
       urlRegex.findAllIn(l).matchData foreach {
@@ -81,8 +85,8 @@ object WebCrawler {
           val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
           val absoluteFoundURL = formatURL((foundURL, parentURL))
-          if (foundURL != "" && foundURL.endsWith(".html")
-              /*&& !uniqueURLs.contains(absoluteFoundURL)*/) {
+          if (foundURL != "" && foundURL.endsWith(".html") && !foundURL.contains("login")
+              && !uniqueURLs.contains(absoluteFoundURL)) {
             toParse.enqueue(absoluteFoundURL)
             uniqueURLs.add(absoluteFoundURL)
             //if (verbose >= 2)
@@ -137,7 +141,7 @@ object WebCrawler {
   }
     
   def sign(n:Integer): Integer = {
-    if(n < 1) return 0
+    if(n < 0) return 0
     else return 1
   }
   
@@ -219,18 +223,22 @@ object WebCrawler {
     var t = Set[(String, String)]()
     
     val keyList = pageHashes.keySet.toList
-    
+    var countIter = 0
     
     for(i <- 0 until pageHashes.keySet.size;
         j <- i+1 until pageHashes.keySet.size){
         val key1 = keyList.apply(i)
         val key2 = keyList.apply(j)
       
+        countIter +=1
+        
+        
+        val hDist = hammingDistance(pageHashes(key1), pageHashes(key2))
       
-       if(pageHashes(key1) == pageHashes(key2)){
+       if(hDist == 0){
            edCount = edCount +1
-       }else if(hammingDistance(pageHashes(key1), pageHashes(key2)) < 2)
-         ndCount = ndCount +1;
+       }else if(hDist > 0 && hDist < 4)
+         ndCount = ndCount +1
     }
 
            return (ndCount, edCount)
