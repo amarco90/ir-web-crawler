@@ -12,6 +12,7 @@ object WebCrawler {
   val toParse = new Stack[String]
   val uniqueURLs = Set[String]()
   val uniqueEnglishPages = Set[String]()
+  var uniqEngPages = 0;
 //  var pageShingles = Set[String]()
   var pageText = ""
   var verbose = 0
@@ -52,7 +53,7 @@ object WebCrawler {
     println("Distinct URLs : " + uniqueURLs.size)
     println("Exact duplicates : " + dupli._2)
     println("Near duplicates : " + dupli._1)
-    println("Unique English pages found : " + uniqueEnglishPages.size)
+    println("Unique English pages found : " + uniqEngPages)
     println("Term frequency of \"student\" : " + studentOccurrences)
   }
 
@@ -101,7 +102,7 @@ object WebCrawler {
     }
 
     if (pageText != "")
-      if(langDet.isEnglish(pageText)) uniqueEnglishPages.add(url)
+      if(langDet.isEnglish(pageText)) /*uniqueEnglishPages.add(url)*/ uniqEngPages = uniqEngPages +1
 
        val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
        val shingles = tokens.sliding(n).toSet
@@ -224,9 +225,9 @@ object WebCrawler {
         val key2 = keyList.apply(j)
       
       
-       if(hammingDistance(pageHashes(key1), pageHashes(key2)) == 0){
+       if(pageHashes(key1) == pageHashes(key2)){
            edCount = edCount +1
-       }else if(hammingDistance(pageHashes(key1), pageHashes(key2)) < 3)
+       }else if(hammingDistance(pageHashes(key1), pageHashes(key2)) < 2)
          ndCount = ndCount +1;
     }
 
