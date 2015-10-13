@@ -1,6 +1,8 @@
 package ch.ethz.ir.g19
 
 import scala.collection.mutable.Set
+import scala.collection.mutable.MutableList
+import scala.collection.immutable.{Set => ImSet}
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashMap
 import scala.io.BufferedSource
@@ -12,17 +14,23 @@ object WebCrawler {
   val uniqueURLs = Set[String]()
   var notFoundResources = 0
   val uniqueEnglishPages = Set[String]()
+  val fullTextHash = HashMap[Int, MutableList[String]]()
+  val jaccardHash = HashMap[String, ImSet[Int]]()
   var uniqEngPages = 0
 //  var pageShingles = Set[String]()
   var pageText = ""
   var verbose = 0
   val n = 5
   val gramLength = 3
-  val pageHashes = new HashMap[String, String]
+  val pageHashes = new HashMap[String, List[Int]]
   var langDet : LanguageDetector = null
   var studentOccurrences = 0
-  var permutedTables = HashMap[List[Int], List[(String, String)]]()
+ // var permutedTables = HashMap[List[Int], List[(String, String)]]()
+  var permutedTables = HashMap[List[Int], HashMap[Int, Set[String]]]()
   var cc = 0
+  var countED = 0
+  
+  var fuckthis = 0;
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -32,7 +40,7 @@ object WebCrawler {
 
     langDet = new LanguageDetector(gramLength, verbose)
 
-    //definePermutations(5);
+    definePermutations(4);
     
     val initParent =
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
@@ -40,19 +48,27 @@ object WebCrawler {
     val initURL = formatURL(initParent, initResource)
     toParse.enqueue(initURL)
     uniqueURLs.add(initURL)
+    
+    val start = System.currentTimeMillis()
 
-    while (!toParse.isEmpty) {
+    while (!toParse.isEmpty && fuckthis < 1500) {
       val url = toParse.dequeue()
       if (verbose >= 1)
         println("crawling: " + url)
       parseURL(url)
     }
     
-    val dupli = searchDuplicates()
+    val time = start - System.currentTimeMillis()
+    
+    println("Pages per seconds : " + (pageHashes.keySet.size / (time / 1000)).toDouble)
+    
+    
+    
+    val dupli = searchDuplicates2()
     println("-----------OUTPUT------------")
     println("Distinct URLs: " + (uniqueURLs.size - notFoundResources))
-    //println("Exact duplicates: " + dupli._2)
-    //println("Near duplicates: " + dupli._1)
+    println("Exact duplicates: " + countED)
+    println("Near duplicates : " + dupli)
     println("Unique English pages found: " + uniqEngPages)
     println("Term frequency of \"student\": " + studentOccurrences)
   }
@@ -74,7 +90,7 @@ object WebCrawler {
     }
 
     cc+=1
-    
+    fuckthis +=1
     println("---------------------------------" + cc + "---------------------------------")
     
     for (l <- sourceCode.getLines()) {
@@ -84,11 +100,12 @@ object WebCrawler {
           val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
           val absoluteFoundURL = formatURL(parentURL, foundURL)
-          if (foundURL != "" && (!foundURL.startsWith("http") || foundURL.startsWith("http://idvm-infk-hofmann03.inf.ethz.ch/"))
+          if (foundURL != "" /*&& !foundURL.contains("login")*/ && (!foundURL.startsWith("http") || foundURL.startsWith("http://idvm-infk-hofmann03.inf.ethz.ch/"))
               && foundURL.endsWith(".html")
               && !uniqueURLs.contains(absoluteFoundURL)) {
             toParse.enqueue(absoluteFoundURL)
             uniqueURLs.add(absoluteFoundURL)
+            
             if (verbose >= 2)
               println(" new URL found: " + absoluteFoundURL +
                       " (" + foundURL + ")")
@@ -103,23 +120,41 @@ object WebCrawler {
         }
       }
     }
-    pageText.replaceAll("&[Aa]uml;", "ä").replaceAll("&[Oo]uml;", "ö")
-        .replaceAll("&[Uu]uml;", "ü")
-
-    if (pageText != "")
-      if(langDet.isEnglish(pageText)) uniqEngPages = uniqEngPages +1
-
-       /*val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList
-       val shingles = tokens.sliding(n).toSet
-       val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
-       
-       val fingerprint = getFingerprint(hashes)
-       //storePermutation(url, fingerprint)
-       
-       pageHashes.put(url, fingerprint)*/
-       
-    val currentStudent = "(?i)\\sstudent\\s".r.findAllIn(pageText).length
-    studentOccurrences += currentStudent
+    pageText = pageText.replaceAll("&nbsp;?", " ").replaceAll("&[Aa]uml;", "ä")
+        .replaceAll("&[Oo]uml;", "ö").replaceAll("&[Uu]uml;", "ü")
+        
+        val currentStudent = "(?i)\\sstudent\\s".r.findAllIn(pageText).length
+        studentOccurrences += currentStudent
+        
+        val textHash = pageText.hashCode()
+        if(fullTextHash.contains(textHash)){
+          val collisions = fullTextHash.apply(textHash)
+          if(collisions.contains(pageText)){
+            countED += 1
+          }else{
+            collisions+=pageText
+          }
+        }else{ 
+          fullTextHash.put(textHash, MutableList(pageText))
+          if (pageText != "")
+            if(langDet.isEnglish(pageText)) uniqEngPages = uniqEngPages +1
+      
+             val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList.map { x => x.toLowerCase() }
+             val shingles = tokens.sliding(n).toSet
+             
+             val setHashShingles = shingles.map {_.hashCode()}.toSet
+             
+             jaccardHash.put(url, setHashShingles)
+             
+             val hashes = setHashShingles.map { h => binary(h) }.toList
+             
+             val fingerprint = getFingerprint(hashes)
+             storePermutation(url, fingerprint)
+             
+             pageHashes.put(url, fingerprint)
+        }
+    
+    
 
     pageText = ""
   }
@@ -137,53 +172,73 @@ object WebCrawler {
     return parts.mkString("/") // build the string back
   }
     
-  def sign(n:Integer): Integer = {
+ def sign(n:Int): Int = {
     if(n < 0) return 0
     else return 1
   }
   
-  def getFingerprint(shingleSet: List[String]): String = {
-      val listOfbitList = shingleSet.map { x => x.sliding(1).toList }
-
+  def getFingerprint(shingleSet: List[String]): List[Int] = {
+      val listOfbitList = shingleSet.map { x => x.sliding(1).toList.map(_.toString.toInt) }
+      
       val bigG = for {pos <- 0 until listOfbitList.apply(0).length} 
-      yield listOfbitList.map { x => (x.apply(pos)).toInt*2-1 }.reduce(_+_)
+      yield listOfbitList.map { x => (x.apply(pos))*2-1 }.reduce(_+_)
         
-      val smallG = bigG.map { x => sign(x)}.mkString
+      val smallG = bigG.map { x => sign(x)}.toList
         
       return smallG
       
   }
   
-  // Permutations: HashMap(pi_k -> List(URL, Fingerprint))
-  
-  def definePermutations(n: Int) /* : HashMap[List[Int], List[(String, String)]] = */{
+  def definePermutations(n: Int) {
     var iter = n
     
     while(iter != 0){
-      val randomP = sample(0 to 30 toList, 20)
+      val randomP = sample(0 to 30 toList, 8)
       if(!permutedTables.contains(randomP)){
-        permutedTables.put(randomP, List())
+        permutedTables.put(randomP, HashMap[Int, Set[String]]())
         iter = iter - 1;  
       }
     }
   }
   
-  def storePermutation(url: String, fingerprint: String/*, pTables: HashMap[List[Int], List[(String, String)]]*/)/*: HashMap[List[Int], List[(String, String)]] = */{
+  def storePermutation(url: String, fingerprint: List[Int]) {
     
-    val intFP = Integer.parseInt(fingerprint,2)
+    val emptyMask = "00000000000000000000000000000000"
     
-    val emptyMask = "0"
+    val fpInt = convertBinaryListToInt(fingerprint)
     
     for(pi_k <- permutedTables.keySet){
-      var mask = emptyMask;
-      mask = pi_k.foldLeft(mask)((s, i) => s.updated(i, '1'))
-      val maskB = Integer.parseInt(mask,2)
+      val maskL = pi_k.foldLeft(emptyMask)((s, i) => s.updated(i, '1')).toList.map (_.toString.toInt)
+
+      val maskInt = convertBinaryListToInt(maskL)
       
-      val permutedFP = (intFP & maskB).toBinaryString
+      val permutedFPInt =  fpInt & maskInt
+      /*println("####################################### permutation : " + pi_k.sortWith(_ < _))
+      println("####################################### permutation : " + pi_k)
+      println("####################################### original FP : " + binary(fpInt))
+      println("#######################################        mask : " + binary(maskInt))
+      println("####################################### permuted FP : " + binary(permutedFPInt))
+      println("####################################### original FP : " + fpInt)
+      println("#######################################        mask : " + maskInt)
+      println("####################################### permuted FP : " + permutedFPInt)*/
       
-     // permutedTables(pi_k) :+ (url, permutedFP)
+      val FPHashtable = permutedTables(pi_k)
       
-      permutedTables.update(pi_k, permutedTables(pi_k):::List((url, permutedFP)))
+      val urlList = FPHashtable.getOrElse(permutedFPInt, Set())
+      
+     // urlList.add(url)
+      
+      FPHashtable.update(permutedFPInt, urlList += url)
+      
+      //FPHashtable.update(permutedFPInt, url :: urlList)
+      
+       permutedTables.update(pi_k, FPHashtable)
+
+     /* println("#######################################         urlList : " + urlList)
+      println("#######################################     FPHashtable : " + FPHashtable)
+      println("####################################### permutedTables2 : " + permutedTables2)*/
+      
+ 
     }
   }
   
@@ -210,38 +265,99 @@ object WebCrawler {
     return tokens
   }
   
-  def searchDuplicates(): (Int, Int) = {
+  
+  def convertBinaryListToInt(binList: List[Int]): Int = 
+    (0 to 31).foldLeft(0){(a,index) => a + (1<<index)*binList.reverse(index) }
+  
+  def searchDuplicates2(): Int = {
     
-    var ndCount = 0;
-    var edCount = 0;
+    var cntND = 0
+    var cntED = 0
     
-    print("page count: " + pageHashes.keySet.size)
-    
-    var t = Set[(String, String)]()
     
     val keyList = pageHashes.keySet.toList
     var countIter = 0
+    val emptyMask = "00000000000000000000000000000000"
     
-    for(i <- 0 until pageHashes.keySet.size;
-        j <- i+1 until pageHashes.keySet.size){
-        val key1 = keyList.apply(i)
-        val key2 = keyList.apply(j)
+    
+    for(i <- 0 until pageHashes.keySet.size){
+      var candidates = Set[String]()
+      val urlQ = keyList.apply(i)
+      val fp = pageHashes.getOrElse(urlQ, Nil)
       
+        
+        val fpInt = convertBinaryListToInt(fp)
+      
+      for(pi_k <- permutedTables.keySet){
+       
+        val maskL = pi_k.foldLeft(emptyMask)((s, i) => s.updated(i, '1')).toList.map (_.toString.toInt)
+        val maskInt = convertBinaryListToInt(maskL)
+    
+        val query = fpInt & maskInt
+    
+        candidates = candidates ++ permutedTables(pi_k).getOrElse(query, Set())
+        
         countIter +=1
-        
-        
-        val hDist = hammingDistance(pageHashes(key1), pageHashes(key2))
-      
-       if(hDist == 0){
-           edCount = edCount +1
-       }else if(hDist > 0 && hDist < 4)
-         ndCount = ndCount +1
-    }
 
-           return (ndCount, edCount)
+       }
+      
+      
+      println("Number of candidates for " + urlQ+" ("+fpInt+") : " + candidates.toSet.size)
+      
+      val fpCandidates = for{ url <- candidates} yield ((pageHashes.getOrElse(url, List()), url))
+      
+      val counts = compareHamming((fp, urlQ), fpCandidates)
+      cntND += counts
+      
+      
+      
+      
+    }
+    
+    return cntND
+    
+  }
+
+  
+  def compareHamming(queryFP : (List[Int], String), candidates : Set[(List[Int], String)]): Int = {
+    def hammingDistance(s1: String, s2: String): Int = s1.zip(s2).count(c => c._1 != c._2)
+    
+    val cSet = candidates
+    
+    var cntND = 0;
+    var cntED = 0;
+    val qStr = queryFP._1.mkString
+    val urlQ = queryFP._2
+    
+    for{candidate <- cSet}{
+      val candidateStr = candidate._1.mkString
+      val candidateUrl = candidate._2
+      
+      if(!qStr.equals(candidateStr) && !urlQ.equals(candidateUrl)){
+        if(hammingDistance(qStr, candidateStr) <= 3){
+          if(jaccardSimilarity(urlQ, candidateUrl) > 0.9)
+          cntND += 1
+        }
+      }
+      
+    }
+    
+    return cntND
+     
   }
   
-  def hammingDistance(s1: String, s2: String): Int = s1.zip(s2).count(c => c._1 != c._2)
+  def jaccardSimilarity(url1: String, url2: String): Double = {
+    
+    val url1Set = jaccardHash.getOrElse(url1, ImSet())
+    val url2Set = jaccardHash.getOrElse(url2, ImSet())
+    
+    val sim = (url1Set intersect url2Set).size.toDouble/(url1Set union url2Set).size
+    
+    return sim
+    
+  }
+  
+  
   
 }
 
