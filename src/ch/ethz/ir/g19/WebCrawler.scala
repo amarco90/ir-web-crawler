@@ -1,6 +1,6 @@
 package ch.ethz.ir.g19
 
-import scala.collection.mutable.Set
+import scala.collection.mutable.{Set => MutSet}
 import scala.collection.mutable.MutableList
 import scala.collection.immutable.{Set => ImSet}
 import scala.collection.mutable.Queue
@@ -10,8 +10,10 @@ import java.io.FileNotFoundException
 import scala.util.Random
 
 object WebCrawler {
+  type Shingle = List[String]
+  
   val toParse = new Queue[String]
-  val uniqueURLs = Set[String]()
+  val uniqueURLs = MutSet[String]()
   var notFoundResources = 0
   val uniqueEnglishPages = Set[String]()
   val fullTextHash = HashMap[Int, MutableList[String]]()
@@ -19,13 +21,23 @@ object WebCrawler {
   var uniqEngPages = 0
 //  var pageShingles = Set[String]()
   var pageText = ""
+  val Domain = "http://idvm-infk-hofmann03.inf.ethz.ch/"
   var verbose = 0
   var cntloginPerso = 0;
   val n = 5
   val gramLength = 3
+  val pageHashes = MutableList[Tuple2[List[String], String]]()//MutableList[List[String]]()
+  //val pageHashes = new HashMap[String, String]
+  val fingerprints = new HashMap[Int, MutableList[String]]
+  var exactDuplicates = 0
+  var nearDuplicates = 0
+  val nearDuplicateThreshold = 0.95
   val pageHashes = new HashMap[String, List[Int]]
   var langDet : LanguageDetector = null
   var studentOccurrences = 0
+  val numRepetitions = 70
+  val permCodes = generatePermutationCodes(32, numRepetitions)
+  //var permutedTables = HashMap[List[Int], List[(String, String)]]()
  // var permutedTables = HashMap[List[Int], List[(String, String)]]()
   var permutedTables = HashMap[List[Int], HashMap[Int, Set[String]]]()
   var cc = 0
@@ -52,13 +64,25 @@ object WebCrawler {
     
     val start = System.currentTimeMillis()
 
-    while (!toParse.isEmpty/* && fuckthis < 1500*/) {
+    val startTime = System.currentTimeMillis()
+    var c = 0
+    while (!toParse.isEmpty) {
       val url = toParse.dequeue()
       if (verbose >= 1)
         println("crawling: " + url)
       parseURL(url)
+      c += 1
     }
+    println((System.currentTimeMillis() - startTime) / 1000)
     
+    if (verbose >= 1)
+      println("Detecting languages of unique documents...")
+    for ((k, v) <- fingerprints) {
+      v.foreach {
+        x => if(!x.isEmpty && langDet.isEnglish(x))
+          uniqEngPages = uniqEngPages + 1
+      }
+    }
     val time = start - System.currentTimeMillis()
     
     println("Pages per seconds : " + (pageHashes.keySet.size / (time / 1000)).toDouble)
@@ -102,8 +126,8 @@ object WebCrawler {
           val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
           val absoluteFoundURL = formatURL(parentURL, foundURL)
-          if (foundURL != ""  && (!foundURL.startsWith("http") || foundURL.startsWith("http://idvm-infk-hofmann03.inf.ethz.ch/"))
-              && foundURL.endsWith(".html")
+          if (foundURL != "" && foundURL.endsWith(".html")
+              && (!foundURL.startsWith("http") || foundURL.startsWith(Domain))
               && !uniqueURLs.contains(absoluteFoundURL)) {
          //   if(loginRegex.findFirstIn(foundURL) == None){
             toParse.enqueue(absoluteFoundURL)
@@ -145,7 +169,46 @@ object WebCrawler {
           fullTextHash.put(textHash, MutableList(pageText))
           if (pageText != "")
             if(langDet.isEnglish(pageText)) uniqEngPages = uniqEngPages +1
+    val f = fingerprint(pageText)
+    if (fingerprints.contains(f)) {
+      val collisions = fingerprints.apply(f)
+      if (collisions.contains(pageText)) {
+        if (verbose >= 1)
+          println("  exact duplicate")
+        exactDuplicates += 1
+      } else {
+        collisions += pageText
+      }
+    } else {
+      fingerprints.put(f, MutableList(pageText))
       
+       val shingles = tokens.sliding(n).toSet
+       val hashes = shingles.map(_.hashCode).map { h => binary(h) }.toList
+      // check near-duplicate
+      val binaryHashCodes = shingle(pageText, q)
+          .map(x => binary(x.hashCode).toList)
+      
+      val minHashes = MutableList[String]()
+      for (positions <- permCodes) {
+        val permHashes = for (hc <- binaryHashCodes)
+          yield positions.map(hc.apply(_))
+        minHashes += permHashes.toList.map(_.mkString).min
+      }
+        //yield binaryHashCodes.zipWithIndex.filter(x => positions.contains(x._2)).map(_._1.mkString)
+      //println(minHashes.take(3))
+      //val permMinHashes = for (n <- 0 until numRepetitions)
+        //yield hashCodes.map(_.permutations.take(numR)).min
+        //yield binaryHashCodes.map(Random.shuffle(_).mkString).min
+      
+      for (l <- pageHashes) {
+        val coincide = for (n <- 0 until numRepetitions)
+          yield minHashes.apply(n) == l._1.apply(n)
+        val sim = coincide.filter(_ == true).length.toDouble / numRepetitions
+        if (sim >= nearDuplicateThreshold) {
+          nearDuplicates += 1
+          println("J(S_1, S_2) = " + sim)
+          println(url + " is similar to " + l._2)
+/* check here */
              val tokens = pageText.split("[ .,;:?!\t\n\r\f]+").toList.map { x => x.toLowerCase() }
              val shingles = tokens.sliding(n).toSet
              
@@ -160,12 +223,31 @@ object WebCrawler {
              
              pageHashes.put(url, fingerprint)
         }
+      }
+      pageHashes += Tuple2(minHashes.toList, url)
+    }
     
-    
+    val currentStudent = "(?i)\\sstudent\\s".r.findAllIn(pageText).length
+    studentOccurrences += currentStudent
 
     pageText = ""
   }
 
+  def generatePermutationCodes(k: Int, n: Int): List[List[Int]] = {
+    val until32 = (0 until 32).toList
+    val permutationCodes = for (n <- 0 until n)
+      yield Random.shuffle(until32)
+    return permutationCodes.map(_.takeRight(k)).toList
+  }
+  
+  def fingerprint(s: String) =
+    s.hashCode
+  
+  def shingle(text: String, q: Int): Set[Shingle] = {
+    val tks = text.split("[ .,;:/?!\t\n\r\f]+").toList
+    return tks.sliding(q).toSet.asInstanceOf[Set[Shingle]]
+  }
+  
   def binary(value: Int) : String =
     String.format("%32s", Integer.toBinaryString(value)).replace(' ', '0')
 
@@ -206,7 +288,7 @@ object WebCrawler {
         iter = iter - 1;  
       }
     }
-  }
+  }*/
   
   def storePermutation(url: String, fingerprint: List[Int]) {
     
@@ -247,7 +329,7 @@ object WebCrawler {
       
  
     }
-  }
+  }*/
   
   def sample[A](itms:List[A], sampleSize:Int) = {
 
@@ -262,17 +344,6 @@ object WebCrawler {
         collect(itms toVector, sampleSize, Nil)
     } 
 
-  def streamTokens(path : String, n : Int) : Iterator[String] = {
-    val tokens = for {
-      line <- io.Source.fromFile(path).getLines.map(l => l.toLowerCase)
-          .map(l => l.replaceAll("[\\d()\"]+", "")).take(200)
-      start <- 0 to line.length
-      if start + n <= line.length
-    } yield line.substring(start, start + n)
-    return tokens
-  }
-  
-  
   def convertBinaryListToInt(binList: List[Int]): Int = 
     (0 to 31).foldLeft(0){(a,index) => a + (1<<index)*binList.reverse(index) }
   
@@ -364,7 +435,7 @@ object WebCrawler {
     
   }
   
-  
+  def hammingDistance(s1: String, s2: String): Int = s1.zip(s2).count(c => c._1 != c._2)
   
 }
 
