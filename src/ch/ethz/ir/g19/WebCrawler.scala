@@ -49,7 +49,7 @@ object WebCrawler {
 
     langDet = new LanguageDetector(gramLength, verbose)
 
-    definePermutations(5);
+    definePermutations(8, 10);
 
     val initParent =
       "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
@@ -250,11 +250,11 @@ object WebCrawler {
     return smallG
   }
 
-  def definePermutations(n: Int) {
+  def definePermutations(n: Int, topNBits: Int) {
     var iter = n
 
     while (iter != 0) {
-      val randomP = sample(0 to 30 toList, 10)
+      val randomP = sample(0 to 31 toList, topNBits)
       if (!permutedTables.contains(randomP)) {
         permutedTables.put(randomP, HashMap[Int, MutSet[String]]())
         iter = iter - 1;
@@ -380,7 +380,7 @@ object WebCrawler {
 
       if (!qStr.equals(candidateStr) && !urlQ.equals(candidateUrl)) {
         if (hammingDistance(qStr, candidateStr) <= 6) {
-          if (jaccardSimilarity(urlQ, candidateUrl) > 0.8)
+          if (jaccardSimilarity(urlQ, candidateUrl) > 0.85)
             cntND += 1
         }
       }
