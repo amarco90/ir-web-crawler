@@ -2,7 +2,7 @@ package ch.ethz.ir.g19
 
 import scala.collection.mutable.{ Set => MutSet }
 import scala.collection.mutable.MutableList
-import scala.collection.immutable.Set//{ Set => ImSet }
+import scala.collection.immutable.Set //{ Set => ImSet }
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashMap
 import scala.io.BufferedSource
@@ -17,7 +17,7 @@ object WebCrawler {
   var notFoundResources = 0 // URLs that give loading error
 
   val fingerprints = new HashMap[Int, MutableList[String]] // for exact dup
-  
+
   val uniqueEnglishPages = Set[String]()
   val fullTextHash = HashMap[Int, MutableList[String]]()
   val jaccardHash = HashMap[String, Set[Int]]()
@@ -39,6 +39,7 @@ object WebCrawler {
   var permutedTables = HashMap[List[Int], HashMap[Int, MutSet[String]]]()
   var visitedURLs = 0
   var countED = 0 // count Exact Duplicates
+  var countND = 0 // count Near Duplicates
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -60,13 +61,13 @@ object WebCrawler {
     val start = System.currentTimeMillis()
 
     val startTime = System.currentTimeMillis()
-    var c = 0
     while (!toParse.isEmpty) {
       val url = toParse.dequeue()
+      visitedURLs +=1
       if (verbose >= 1)
         println("[" + visitedURLs + "] crawling: " + url)
       parseURL(url)
-      c += 1
+      
     }
     println((System.currentTimeMillis() - startTime) / 1000)
 
@@ -81,13 +82,13 @@ object WebCrawler {
     }*/
     val time = start - System.currentTimeMillis()
 
-    println("Pages per seconds : " + (pageHashesSimHash.keySet.size.toDouble / (time / 1000)))
+    println("Pages per seconds : " + ((uniqueURLs.size - notFoundResources).toDouble / (time / 1000)))
 
-    val dupli = searchDuplicates()
+   // val dupli = searchDuplicates()
     println("-----------OUTPUT------------")
     println("Distinct URLs: " + (uniqueURLs.size - notFoundResources) + " login/personen : " + cntloginPerso)
     println("Exact duplicates: " + countED)
-    println("Near duplicates : " + dupli)
+    println("Near duplicates : " + countND)
     println("Unique English pages found: " + uniqEngPages)
     println("Term frequency of \"student\": " + studentOccurrences)
   }
@@ -195,7 +196,8 @@ object WebCrawler {
       val hashesSimHash = setHashShingles.map { h => binary(h) }.toList
 
       val fingerprint = simHash(hashesSimHash)
-      storePermutation(url, fingerprint)
+      //storePermutation(url, fingerprint)
+      countND += searchDuplicatesAndStorePermu(url, fingerprint)
 
       pageHashesSimHash.put(url, fingerprint)
 
@@ -260,7 +262,7 @@ object WebCrawler {
     }
   }
 
-  def storePermutation(url: String, fingerprint: List[Int]) {
+  /*def storePermutation(url: String, fingerprint: List[Int]) {
     val emptyMask = "00000000000000000000000000000000"
 
     val fpInt = convertBinaryListToInt(fingerprint)
@@ -271,25 +273,14 @@ object WebCrawler {
       val maskInt = convertBinaryListToInt(maskL)
 
       val permutedFPInt = fpInt & maskInt
-      /*println("####################################### permutation : " + pi_k.sortWith(_ < _))
-      println("####################################### permutation : " + pi_k)
-      println("####################################### original FP : " + binary(fpInt))
-      println("#######################################        mask : " + binary(maskInt))
-      println("####################################### permuted FP : " + binary(permutedFPInt))
-      println("####################################### original FP : " + fpInt)
-      println("#######################################        mask : " + maskInt)
-      println("####################################### permuted FP : " + permutedFPInt)*/
 
       val FPHashtable = permutedTables(pi_k)
       val urlList = FPHashtable.getOrElse(permutedFPInt, MutSet())
       FPHashtable.update(permutedFPInt, urlList += url)
       permutedTables.update(pi_k, FPHashtable)
 
-      /* println("#######################################         urlList : " + urlList)
-      println("#######################################     FPHashtable : " + FPHashtable)
-      println("####################################### permutedTables2 : " + permutedTables2)*/
     }
-  }
+  }*/
 
   def sample[A](itms: List[A], sampleSize: Int) = {
     def collect(vect: Vector[A], sampleSize: Int, acc: List[A]): List[A] = {
@@ -306,7 +297,40 @@ object WebCrawler {
   def convertBinaryListToInt(binList: List[Int]): Int =
     (0 to 31).foldLeft(0) { (a, index) => a + (1 << index) * binList.reverse(index) }
 
-  def searchDuplicates(): Int = {
+  def searchDuplicatesAndStorePermu(urlQ: String, fingerprint: List[Int]): Int = {
+    var cntND = 0
+
+    val keyList = pageHashesSimHash.keySet.toList
+    val emptyMask = "0" * 32
+
+    var candidates = Set[String]()
+
+    val fpInt = convertBinaryListToInt(fingerprint)
+
+    for (pi_k <- permutedTables.keySet) {
+      val maskL = pi_k.foldLeft(emptyMask)((s, i) => s.updated(i, '1')).toList.map(_.toString.toInt)
+      val maskInt = convertBinaryListToInt(maskL)
+
+      val query = fpInt & maskInt
+      candidates = candidates ++ permutedTables(pi_k).getOrElse(query, Set())
+
+      val FPHashtable = permutedTables(pi_k)
+      val urlList = FPHashtable.getOrElse(query, MutSet())
+      FPHashtable.update(query, urlList += urlQ)
+      permutedTables.update(pi_k, FPHashtable)
+
+    }
+
+    println("Number of candidates for " + urlQ + " (" + fpInt + ") : " + candidates.toSet.size)
+    val fpCandidates = for { url <- candidates } yield ((pageHashesSimHash.getOrElse(url, List()), url))
+
+    val counts = compareHamming((fingerprint, urlQ), fpCandidates)
+    cntND += counts
+
+    return cntND
+  }
+
+/*  def searchDuplicates(): Int = {
     var cntND = 0
     var cntED = 0
 
@@ -338,7 +362,7 @@ object WebCrawler {
     }
 
     return cntND
-  }
+  }*/
 
   def compareHamming(queryFP: (List[Int], String), candidates: Set[(List[Int], String)]): Int = {
     def hammingDistance(s1: String, s2: String): Int = s1.zip(s2).count(c => c._1 != c._2)
@@ -356,7 +380,7 @@ object WebCrawler {
 
       if (!qStr.equals(candidateStr) && !urlQ.equals(candidateUrl)) {
         if (hammingDistance(qStr, candidateStr) <= 6) {
-          if (jaccardSimilarity(urlQ, candidateUrl) > 0.85)
+          if (jaccardSimilarity(urlQ, candidateUrl) > 0.8)
             cntND += 1
         }
       }
