@@ -1,29 +1,36 @@
 package ch.ethz.ir.g19
 
+import java.io.FileNotFoundException
+import java.net.MalformedURLException
+import java.net.URL
+
 import scala.collection.mutable.{ Set => MutSet }
 import scala.collection.mutable.MutableList
-import scala.collection.immutable.Set//{ Set => ImSet }
+import scala.collection.immutable.Set //{ Set => ImSet }
 import scala.collection.mutable.Queue
 import scala.collection.mutable.HashMap
 import scala.io.BufferedSource
-import java.io.FileNotFoundException
 import scala.util.Random
 
 object WebCrawler {
   type Shingle = List[String]
 
-  val toParse = new Queue[String] // Frontier of URLs to parse
-  val uniqueURLs = MutSet[String]() // Unique URLs found
+  var verbose = 0 // verbosity level
+  val DefaultURL =
+    "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/en.html"
+
+  val toParse = new Queue[URL] // Frontier of URLs to parse
+  val uniqueURLs = MutSet[URL]() // Unique URLs found
   var notFoundResources = 0 // URLs that give loading error
 
   val fingerprints = new HashMap[Int, MutableList[String]] // for exact dup
-  
-  val uniqueEnglishPages = Set[String]()
-  val fullTextHash = HashMap[Int, MutableList[String]]()
-  val jaccardHash = HashMap[String, Set[Int]]()
+
   var uniqEngPages = 0
+  var countED = 0 // count Exact Duplicates
+
+  val jaccardHash = HashMap[String, Set[Int]]()
   val Domain = "http://idvm-infk-hofmann03.inf.ethz.ch/"
-  var verbose = 0
+
   var cntloginPerso = 0;
   val q = 5 // q-grams length
   val gramLength = 3
@@ -32,13 +39,13 @@ object WebCrawler {
   var nearDuplicates = 0
   val nearDuplicateThreshold = 0.95
   val pageHashesSimHash = new HashMap[String, List[Int]]
-  var langDet: LanguageDetector = null
   var studentOccurrences = 0
   val numRepetitions = 70
   val permCodes = generatePermutationCodes(32, numRepetitions)
   var permutedTables = HashMap[List[Int], HashMap[Int, MutSet[String]]]()
   var visitedURLs = 0
-  var countED = 0 // count Exact Duplicates
+
+  var langDet: LanguageDetector = null
 
   def main(args: Array[String]) {
     if (args contains "-v")
@@ -46,27 +53,28 @@ object WebCrawler {
     if (args contains "-vv")
       verbose = 2
 
+    var initURL: URL = null
+    if (args.length > 0 && args(args.length - 1).startsWith("http"))
+      initURL = new URL(args(args.length - 1))
+    else
+      initURL = new URL(DefaultURL)
+
     langDet = new LanguageDetector(gramLength, verbose)
 
     definePermutations(5);
 
-    val initParent =
-      "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
-    val initResource = "en.html"
-    val initURL = formatURL(initParent, initResource)
     toParse.enqueue(initURL)
     uniqueURLs.add(initURL)
 
     val start = System.currentTimeMillis()
 
     val startTime = System.currentTimeMillis()
-    var c = 0
     while (!toParse.isEmpty) {
       val url = toParse.dequeue()
       if (verbose >= 1)
         println("[" + visitedURLs + "] crawling: " + url)
       parseURL(url)
-      c += 1
+      visitedURLs += 1
     }
     println((System.currentTimeMillis() - startTime) / 1000)
 
@@ -92,7 +100,8 @@ object WebCrawler {
     println("Term frequency of \"student\": " + studentOccurrences)
   }
 
-  def parseURL(url: String) {
+  def parseURL(url: URL) {
+    val strURL = url.toString
     val urlRegex = "(href=\")([^\"]*)".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
     val anchorsAndParams = "(#.*)|(\\?.*)".r
@@ -116,21 +125,27 @@ object WebCrawler {
         m =>
           {
             val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
-            val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
-            val absoluteFoundURL = formatURL(parentURL, foundURL)
-            if (foundURL != "" && foundURL.endsWith(".html")
-              && (!foundURL.startsWith("http") || foundURL.startsWith(Domain))
-              && !uniqueURLs.contains(absoluteFoundURL)) {
-              //   if(loginRegex.findFirstIn(foundURL) == None){
-              toParse.enqueue(absoluteFoundURL)
-              uniqueURLs.add(absoluteFoundURL)
-              /*     }
-            else{
-              cntloginPerso+=1
-            }*/
-              if (verbose >= 2)
-                println(" new URL found: " + absoluteFoundURL +
-                  " (" + foundURL + ")")
+            var absoluteFoundURL: URL = null
+            try {
+              absoluteFoundURL = new URL(url, foundURL)
+              val absURL = absoluteFoundURL.toString
+              if (absURL.endsWith(".html") && absURL.startsWith(Domain)
+                && !uniqueURLs.contains(absoluteFoundURL)) {
+                //   if(loginRegex.findFirstIn(foundURL) == None){
+                toParse.enqueue(absoluteFoundURL)
+                uniqueURLs.add(absoluteFoundURL)
+                /*     }
+          else{
+            cntloginPerso+=1
+          }*/
+                if (verbose >= 2)
+                  println(" new URL found: " + absoluteFoundURL +
+                    " (" + foundURL + ")")
+              }
+            } catch {
+              case murle: MalformedURLException => {
+                if (verbose >= 2) System.err.println(" Invalid url " + foundURL)
+              }
             }
           }
       }
@@ -143,8 +158,6 @@ object WebCrawler {
           }
       }
     }
-    if (pageText.contains("Index of"))
-      println(url)
     pageText = pageText.replaceAll("&nbsp;?", " ").replaceAll("&[Aa]uml;", "ä")
       .replaceAll("&[Oo]uml;", "ö").replaceAll("&[Uu]uml;", "ü")
 
@@ -190,21 +203,18 @@ object WebCrawler {
 
       val setHashShingles = shingles.map { _.hashCode() }.toSet
 
-      jaccardHash.put(url, setHashShingles)
+      jaccardHash.put(strURL, setHashShingles)
 
       val hashesSimHash = setHashShingles.map { h => binary(h) }.toList
 
       val fingerprint = simHash(hashesSimHash)
-      storePermutation(url, fingerprint)
+      storePermutation(strURL, fingerprint)
 
-      pageHashesSimHash.put(url, fingerprint)
-
+      pageHashesSimHash.put(strURL, fingerprint)
     }
 
     val currentStudent = "(?i)\\sstudent\\s".r.findAllIn(pageText).length
     studentOccurrences += currentStudent
-
-    pageText = ""
   }
 
   def generatePermutationCodes(k: Int, n: Int): List[List[Int]] = {
@@ -221,16 +231,6 @@ object WebCrawler {
 
   def binary(value: Int): String =
     String.format("%32s", Integer.toBinaryString(value)).replace(' ', '0')
-
-  def formatURL(parentURL: String, foundURL: String): String = {
-    val parts = foundURL.split('/').foldLeft(parentURL.split('/')) {
-      case (cur, dir) =>
-        if (dir == ".") cur // stay in current directory
-        else if (dir == "..") cur.dropRight(1) // go up in the tree
-        else cur :+ dir // cd into directory
-    }
-    return parts.mkString("/") // build the string back
-  }
 
   def sign(n: Int): Int = {
     if (n < 0) return 0
