@@ -20,6 +20,7 @@ object WebCrawler {
 //  var pageShingles = Set[String]()
   var pageText = ""
   var verbose = 0
+  var cntloginPerso = 0;
   val n = 5
   val gramLength = 3
   val pageHashes = new HashMap[String, List[Int]]
@@ -40,7 +41,7 @@ object WebCrawler {
 
     langDet = new LanguageDetector(gramLength, verbose)
 
-    definePermutations(4);
+    definePermutations(5);
     
     val initParent =
         "http://idvm-infk-hofmann03.inf.ethz.ch/eth/www.ethz.ch/"
@@ -51,7 +52,7 @@ object WebCrawler {
     
     val start = System.currentTimeMillis()
 
-    while (!toParse.isEmpty && fuckthis < 1500) {
+    while (!toParse.isEmpty/* && fuckthis < 1500*/) {
       val url = toParse.dequeue()
       if (verbose >= 1)
         println("crawling: " + url)
@@ -66,7 +67,7 @@ object WebCrawler {
     
     val dupli = searchDuplicates2()
     println("-----------OUTPUT------------")
-    println("Distinct URLs: " + (uniqueURLs.size - notFoundResources))
+    println("Distinct URLs: " + (uniqueURLs.size - notFoundResources) +" login/personen : " + cntloginPerso)
     println("Exact duplicates: " + countED)
     println("Near duplicates : " + dupli)
     println("Unique English pages found: " + uniqEngPages)
@@ -77,6 +78,7 @@ object WebCrawler {
     val urlRegex = "(href=\")([^\"]*)".r
     val textRegex = "(>)([^<>]+[a-zA-Z0-9]+)".r
     val anchorsAndParams =  "(#.*)|(\\?.*)".r
+    val loginRegex = "(login[a-z0-9]{4})|(personendetail[a-z0-9]{4})".r
     var sourceCode : BufferedSource = null
     try {
       sourceCode = io.Source.fromURL(url)
@@ -100,11 +102,16 @@ object WebCrawler {
           val foundURL = anchorsAndParams.replaceAllIn(m.group(2), "")
           val parentURL = url.substring(0, url.lastIndexOf('/') + 1)
           val absoluteFoundURL = formatURL(parentURL, foundURL)
-          if (foundURL != "" /*&& !foundURL.contains("login")*/ && (!foundURL.startsWith("http") || foundURL.startsWith("http://idvm-infk-hofmann03.inf.ethz.ch/"))
+          if (foundURL != ""  && (!foundURL.startsWith("http") || foundURL.startsWith("http://idvm-infk-hofmann03.inf.ethz.ch/"))
               && foundURL.endsWith(".html")
               && !uniqueURLs.contains(absoluteFoundURL)) {
+         //   if(loginRegex.findFirstIn(foundURL) == None){
             toParse.enqueue(absoluteFoundURL)
             uniqueURLs.add(absoluteFoundURL)
+       /*     }
+            else{
+              cntloginPerso+=1
+            }*/
             
             if (verbose >= 2)
               println(" new URL found: " + absoluteFoundURL +
@@ -148,7 +155,7 @@ object WebCrawler {
              
              val hashes = setHashShingles.map { h => binary(h) }.toList
              
-             val fingerprint = getFingerprint(hashes)
+             val fingerprint = simHash(hashes)
              storePermutation(url, fingerprint)
              
              pageHashes.put(url, fingerprint)
@@ -177,7 +184,7 @@ object WebCrawler {
     else return 1
   }
   
-  def getFingerprint(shingleSet: List[String]): List[Int] = {
+  def simHash(shingleSet: List[String]): List[Int] = {
       val listOfbitList = shingleSet.map { x => x.sliding(1).toList.map(_.toString.toInt) }
       
       val bigG = for {pos <- 0 until listOfbitList.apply(0).length} 
@@ -193,7 +200,7 @@ object WebCrawler {
     var iter = n
     
     while(iter != 0){
-      val randomP = sample(0 to 30 toList, 8)
+      val randomP = sample(0 to 30 toList, 10)
       if(!permutedTables.contains(randomP)){
         permutedTables.put(randomP, HashMap[Int, Set[String]]())
         iter = iter - 1;  
@@ -334,8 +341,8 @@ object WebCrawler {
       val candidateUrl = candidate._2
       
       if(!qStr.equals(candidateStr) && !urlQ.equals(candidateUrl)){
-        if(hammingDistance(qStr, candidateStr) <= 3){
-          if(jaccardSimilarity(urlQ, candidateUrl) > 0.9)
+        if(hammingDistance(qStr, candidateStr) <= 6){
+          if(jaccardSimilarity(urlQ, candidateUrl) > 0.85)
           cntND += 1
         }
       }
